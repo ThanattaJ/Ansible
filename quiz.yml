@@ -1,0 +1,112 @@
+---
+- name: install server wordpress
+  hosts: serverx
+  remote_user: root
+
+  tasks:
+   - name: install packages
+     yum:
+       name: 
+        - httpd
+        - mariadb
+        - mariadb-server
+        - php
+        - php-common
+        - php-mysql
+        - php-gd
+        - php-xml
+        - php-mbstring
+        - php-mcrypt
+        - php-xmlrpc
+        - unzip
+        - wget
+        - MySQL-python
+       state: latest
+   - name: start httpd service
+     service:
+       name: httpd
+       state: started
+       enabled: yes
+   - name: start mariadb service
+     service:
+       name: mariadb
+       state: started
+       enabled: yes
+   - name: enable firewall
+     firewalld:
+       service: http
+       permanent: yes
+       state: enabled
+       immediate: yes
+   - name: update mysql root password for all root accounts
+     mysql_user:
+       name: root
+       host: "{{ item }}"
+       password: abc
+       login_user: root
+       login_password: abc
+       priv: "*.*:ALL,GRANT"
+     with_items:
+       - localhost
+       - 127.0.0.1
+       - ::1
+   - name: delete mysql.user where user=''
+     mysql_user:
+       login_user: root
+       login_password: abc
+       name: ''
+       host: ''
+       state: absent
+   - name: Delete database with name test
+     mysql_db:
+       login_user: root
+       login_password: abc
+       name: test
+       state: absent
+   - name: Create database with name wordpress
+     mysql_db:
+       login_user: root
+       login_password: abc
+       name: wordpress
+       state: present
+   - name: update mysql root password for all root accounts
+     mysql_user:
+       login_user: root
+       login_password: abc
+       name: ansible
+       password: mypassword
+       priv: "*.*:ALL,GRANT"
+       state: present
+   - name: Extract wordpress
+     unarchive:
+       src: https://wordpress.org/wordpress-5.0.tar.gz
+       dest: /var/www/html/
+       remote_src: yes
+   - name: Recursively change ownership of a directory
+     file:
+       path: /var/www/html/wordpress
+       mode: '0755'
+       recurse: yes
+       owner: apache
+       group: apache
+   - name: Create Directory
+     file:
+       path: /var/www/html/wordpress/wp-content/uploads
+       state: directory
+   - name: chown
+     file:
+       path: /var/www/html/wordpress/wp-content/uploads
+       recurse: yes
+       group: apache
+   - name: move wp-config-sample.php
+     command: mv /var/www/html/wordpress/wp-config-sample.php /var/www/html/wordpress/wp-config.php
+   - name: vim wp-config.php
+     lineinfile:
+       path: /var/www/html/wordpress/wp-config.php
+       line: "define({{item.key}},{{item.value}})"
+       reqrexp: ^define\({{item.key}})
+     loop:
+       - { key: "\'DB_NAME\'", value: "\'wordpress\'" }
+       - { key: "\'DB_USER\'", value: "\'ansible\'" }
+       - { key: "\'DB_PASSWORD\'", value: "\'mypassword\'" }
+       - { key: "\'DB_HOST\'", value: "\'localhost\'" }
